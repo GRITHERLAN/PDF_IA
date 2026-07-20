@@ -51,7 +51,7 @@ def create_local_rag_chain():
         temperature=0.3  # más preciso
     )
 
-    #  Prompt mejorado
+    # Prompt mejorado
     prompt = PromptTemplate.from_template("""
 Eres un asistente experto en análisis de documentos.
 
