@@ -17,17 +17,20 @@ from langchain_groq import ChatGroq
 st.set_page_config(page_title="Chat PDF IA", layout="wide")
 st.title("📄 Chat con PDF (RAG + Groq)")
 
-# 🔐 API KEY desde Streamlit Cloud
 GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 
 
 # =========================
-# PROCESAR PDF (CACHEADO)
+# PROCESAR PDF (CACHE)
 # =========================
 @st.cache_resource
-def process_pdf(file_path):
+def process_pdf(file_bytes):
 
-    loader = PyPDFLoader(file_path)
+    # guardar archivo temporal
+    with open("temp.pdf", "wb") as f:
+        f.write(file_bytes)
+
+    loader = PyPDFLoader("temp.pdf")
     pages = loader.load()
 
     splitter = RecursiveCharacterTextSplitter(
@@ -39,28 +42,19 @@ def process_pdf(file_path):
 
     embedding = FastEmbedEmbeddings()
 
-    # 🔥 IMPORTANTE: persistencia para reutilizar
+    # 🔥 SIN persistencia (clave para Streamlit Cloud)
     vectordb = Chroma.from_documents(
         chunks,
-        embedding=embedding,
-        persist_directory="./local_db"
+        embedding=embedding
     )
 
-    return True  # 👈 NO retornamos vectordb
+    return vectordb
 
 
 # =========================
-# CREAR CHAIN (SIN PARAMS)
+# CREAR CHAIN
 # =========================
-@st.cache_resource
-def get_chain():
-
-    embedding = FastEmbedEmbeddings()
-
-    vectordb = Chroma(
-        persist_directory="./local_db",
-        embedding_function=embedding
-    )
+def get_chain(vectordb):
 
     llm = ChatGroq(
         model="llama3-8b-8192",
@@ -117,19 +111,10 @@ uploaded_file = st.file_uploader("📤 Sube tu PDF", type="pdf")
 
 if uploaded_file:
 
-    # guardar temporal
-    with open("temp.pdf", "wb") as f:
-        f.write(uploaded_file.read())
+    vectordb = process_pdf(uploaded_file.read())
+    chain = get_chain(vectordb)
 
-    st.success("✅ PDF cargado")
-
-    # 🔥 solo procesa (no devuelve vectordb)
-    process_pdf("temp.pdf")
-
-    # 🔥 chain sin parámetros
-    chain = get_chain()
-
-    # memoria chat
+    # memoria del chat
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
