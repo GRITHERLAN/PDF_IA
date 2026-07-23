@@ -64,7 +64,15 @@ def get_chain(vectordb):
 
     prompt = PromptTemplate.from_template("""
 Responde SOLO con base en el contexto.
-
+tambien responde de que trata el pdf o libro compartido.
+Usa TODA la información relevante del contexto.
+Si hay múltiples fragmentos, combínalos.
+Sé claro, preciso y completo.
+Si no encuentras la respuesta, dilo claramente.
+Cita la fuente cuando sea posible.
+limitate a hablar solo del archivo que te pasen.
+si te preguntan algo que no tiene que ver con el pdf, responde que no fuiste entrenado para ello.
+                                          
 Si no está en el documento, responde:
 "No encontré esa información en el PDF"
 
