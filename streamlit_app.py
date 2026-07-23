@@ -8,7 +8,7 @@ from langchain_chroma import Chroma
 
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnablePassthrough, RunnableParallel
-from langchain.schema import Document
+from langchain_core.documents import Document
 
 from langchain_groq import ChatGroq
 
