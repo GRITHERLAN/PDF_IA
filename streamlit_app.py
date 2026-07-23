@@ -53,35 +53,26 @@ def process_pdf(file_bytes):
 # PROCESAR CSV
 # =========================
 def process_csv(file):
-
-    # intentar leer normalmente
     try:
         df = pd.read_csv(file)
     except Exception:
-        # fallback común (CSV con ;)
         df = pd.read_csv(file, sep=";")
 
     if df.empty:
         st.error("El CSV está vacío o no se pudo leer correctamente")
         st.stop()
 
-    # 🔥 limitar filas
     df = df.head(200)
 
     documents = []
 
     for i, row in df.iterrows():
-        content_parts = []
+        # 🔥 CLAVE: usar texto plano, no "col: valor"
+        content = " ".join(
+            [str(v) for v in row.values if pd.notna(v)]
+        )
 
-        for col in df.columns:
-            value = row[col]
-
-            if pd.notna(value):
-                content_parts.append(f"{col}: {value}")
-
-        if content_parts:
-            content = ", ".join(content_parts)
-
+        if content.strip():
             documents.append(
                 Document(
                     page_content=content,
@@ -89,7 +80,6 @@ def process_csv(file):
                 )
             )
 
-    # 🔥 validación crítica
     if not documents:
         st.error("No se pudieron generar documentos del CSV")
         st.stop()
@@ -150,7 +140,7 @@ Respuesta:
 """)
 
     retriever = vectordb.as_retriever(
-        search_kwargs={"k": 2}
+    search_kwargs={"k": 5}
     )
 
     def format_docs(docs):
