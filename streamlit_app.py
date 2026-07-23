@@ -140,7 +140,8 @@ if uploaded_file:
                     result = chain.invoke(question)
                     answer = result["answer"].content
                 except Exception as e:
-                    answer = "⚠️ Error procesando la respuesta"
+                    st.error(e)
+                    answer = str(e)
 
                 st.markdown(answer)
 
