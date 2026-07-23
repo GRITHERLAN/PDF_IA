@@ -17,7 +17,7 @@ from langchain_groq import ChatGroq
 # CONFIG
 # =========================
 st.set_page_config(page_title="Chat IA", layout="wide")
-st.title("Chat con PDF o CSV")
+st.title("Chat con Jimmy")
 
 GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 
@@ -32,16 +32,21 @@ def process_pdf(file_bytes):
 
     loader = PyPDFLoader("temp.pdf")
 
-    pages = loader.load()[:15]  # limitar páginas
+    # 🔥 limitar páginas (evita errores de memoria)
+    pages = loader.load()[:15]
 
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=400,
         chunk_overlap=50
     )
 
-    chunks = splitter.split_documents(pages)
+    documents = splitter.split_documents(pages)
 
-    return chunks
+    if not documents:
+        st.error("No se pudo procesar el PDF")
+        st.stop()
+
+    return documents
 
 
 # =========================
@@ -49,22 +54,45 @@ def process_pdf(file_bytes):
 # =========================
 def process_csv(file):
 
-    df = pd.read_csv(file)
+    # intentar leer normalmente
+    try:
+        df = pd.read_csv(file)
+    except Exception:
+        # fallback común (CSV con ;)
+        df = pd.read_csv(file, sep=";")
 
-    # 🔥 limitar filas para no explotar memoria
+    if df.empty:
+        st.error("El CSV está vacío o no se pudo leer correctamente")
+        st.stop()
+
+    # 🔥 limitar filas
     df = df.head(200)
 
     documents = []
 
     for i, row in df.iterrows():
-        content = ", ".join([f"{col}: {row[col]}" for col in df.columns])
+        content_parts = []
 
-        documents.append(
-            Document(
-                page_content=content,
-                metadata={"row": i}
+        for col in df.columns:
+            value = row[col]
+
+            if pd.notna(value):
+                content_parts.append(f"{col}: {value}")
+
+        if content_parts:
+            content = ", ".join(content_parts)
+
+            documents.append(
+                Document(
+                    page_content=content,
+                    metadata={"row": i}
+                )
             )
-        )
+
+    # 🔥 validación crítica
+    if not documents:
+        st.error("No se pudieron generar documentos del CSV")
+        st.stop()
 
     return documents
 
@@ -73,6 +101,9 @@ def process_csv(file):
 # CREAR VECTOR DB
 # =========================
 def create_vectordb(documents):
+
+    if not documents:
+        raise ValueError("No hay documentos para procesar")
 
     embedding = FastEmbedEmbeddings()
 
@@ -106,7 +137,7 @@ Cita la fuente cuando sea posible.
 limitate a hablar solo del archivo que te pasen.
 si te preguntan algo que no tiene que ver con el pdf, responde que no fuiste entrenado para ello.
 
-Si no está en el documento, responde:
+Si no está en el archivo, responde:
 "No encontré esa información en el archivo"
 
 Contexto:
@@ -155,7 +186,12 @@ uploaded_file = st.file_uploader(
 
 if uploaded_file:
 
-    # 🔥 evitar reprocesar cada vez
+    # 🔥 reset si cambia archivo
+    if "file_name" not in st.session_state or st.session_state.file_name != uploaded_file.name:
+        st.session_state.clear()
+        st.session_state.file_name = uploaded_file.name
+
+    # 🔥 procesar una sola vez
     if "vectordb" not in st.session_state:
 
         with st.spinner("Procesando archivo..."):
@@ -163,12 +199,14 @@ if uploaded_file:
             if uploaded_file.type == "application/pdf":
                 documents = process_pdf(uploaded_file.read())
 
-            elif uploaded_file.type == "text/csv":
+            elif uploaded_file.type in ["text/csv", "application/vnd.ms-excel"]:
                 documents = process_csv(uploaded_file)
 
             else:
                 st.error("Formato no soportado")
                 st.stop()
+
+            st.write("Documentos generados:", len(documents))
 
             vectordb = create_vectordb(documents)
 
@@ -177,7 +215,9 @@ if uploaded_file:
 
     chain = st.session_state.chain
 
-    # memoria del chat
+    # =========================
+    # CHAT
+    # =========================
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
