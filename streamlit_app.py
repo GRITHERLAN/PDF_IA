@@ -15,34 +15,33 @@ from langchain_groq import ChatGroq
 # CONFIG
 # =========================
 st.set_page_config(page_title="Chat PDF IA", layout="wide")
-st.title("📄 Chat con jimmy (PDF)")
+st.title("Chat con PDF")
 
 GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 
 
 # =========================
-# PROCESAR PDF (CACHE)
+# PROCESAR PDF (SIN CACHE GLOBAL)
 # =========================
-@st.cache_resource
 def process_pdf(file_bytes):
 
-    # guardar archivo temporal
     with open("temp.pdf", "wb") as f:
         f.write(file_bytes)
 
     loader = PyPDFLoader("temp.pdf")
-    pages = loader.load()
+
+    # 🔥 Limitar páginas (clave para memoria)
+    pages = loader.load()[:15]
 
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=800,
-        chunk_overlap=100
+        chunk_size=400,
+        chunk_overlap=50
     )
 
     chunks = splitter.split_documents(pages)
 
     embedding = FastEmbedEmbeddings()
 
-    # 🔥 SIN persistencia (clave para Streamlit Cloud)
     vectordb = Chroma.from_documents(
         chunks,
         embedding=embedding
@@ -64,15 +63,7 @@ def get_chain(vectordb):
 
     prompt = PromptTemplate.from_template("""
 Responde SOLO con base en el contexto.
-tambien responde de que trata el pdf o libro compartido.
-Usa TODA la información relevante del contexto.
-Si hay múltiples fragmentos, combínalos.
-Sé claro, preciso y completo.
-Si no encuentras la respuesta, dilo claramente.
-Cita la fuente cuando sea posible.
-limitate a hablar solo del archivo que te pasen.
-si te preguntan algo que no tiene que ver con el pdf, responde que no fuiste entrenado para ello.
-                                          
+Usa toda la información relevante.
 Si no está en el documento, responde:
 "No encontré esa información en el PDF"
 
@@ -86,7 +77,7 @@ Respuesta:
 """)
 
     retriever = vectordb.as_retriever(
-        search_kwargs={"k": 3}
+        search_kwargs={"k": 2}  # 🔥 menos consumo
     )
 
     def format_docs(docs):
@@ -115,12 +106,18 @@ Respuesta:
 # =========================
 # UI
 # =========================
-uploaded_file = st.file_uploader("📤 Sube tu PDF", type="pdf")
+uploaded_file = st.file_uploader("Sube tu PDF", type="pdf")
 
 if uploaded_file:
 
-    vectordb = process_pdf(uploaded_file.read())
-    chain = get_chain(vectordb)
+    # 🔥 Guardar en sesión (NO cache global)
+    if "vectordb" not in st.session_state:
+        with st.spinner("Procesando PDF..."):
+            st.session_state.vectordb = process_pdf(uploaded_file.read())
+            st.session_state.chain = get_chain(st.session_state.vectordb)
+
+    vectordb = st.session_state.vectordb
+    chain = st.session_state.chain
 
     # memoria del chat
     if "messages" not in st.session_state:
