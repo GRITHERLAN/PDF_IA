@@ -57,7 +57,7 @@ def process_pdf(file_bytes):
 def get_chain(vectordb):
 
     llm = ChatGroq(
-        model="llama3-8b-8192",
+        model="llama-3.1-8b-instant",
         temperature=0.3,
         api_key=GROQ_API_KEY
     )
