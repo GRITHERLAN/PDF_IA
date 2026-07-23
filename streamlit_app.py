@@ -15,7 +15,7 @@ from langchain_groq import ChatGroq
 # CONFIG
 # =========================
 st.set_page_config(page_title="Chat PDF IA", layout="wide")
-st.title("📄 Chat con PDF (RAG + Groq)")
+st.title("📄 Chat con jimmy (PDF)")
 
 GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 
