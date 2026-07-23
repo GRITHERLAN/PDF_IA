@@ -1,5 +1,4 @@
 import streamlit as st
-import os
 
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
@@ -23,7 +22,7 @@ GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 
 
 # =========================
-# CACHE (MUY IMPORTANTE)
+# PROCESAR PDF (CACHEADO)
 # =========================
 @st.cache_resource
 def process_pdf(file_path):
@@ -32,7 +31,7 @@ def process_pdf(file_path):
     pages = loader.load()
 
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=800,       # 🔥 reducido
+        chunk_size=800,
         chunk_overlap=100
     )
 
@@ -40,19 +39,31 @@ def process_pdf(file_path):
 
     embedding = FastEmbedEmbeddings()
 
+    # 🔥 IMPORTANTE: persistencia para reutilizar
     vectordb = Chroma.from_documents(
         chunks,
-        embedding=embedding
+        embedding=embedding,
+        persist_directory="./local_db"
     )
 
-    return vectordb
+    return True  # 👈 NO retornamos vectordb
 
 
+# =========================
+# CREAR CHAIN (SIN PARAMS)
+# =========================
 @st.cache_resource
-def get_chain(vectordb):
+def get_chain():
+
+    embedding = FastEmbedEmbeddings()
+
+    vectordb = Chroma(
+        persist_directory="./local_db",
+        embedding_function=embedding
+    )
 
     llm = ChatGroq(
-        model="llama3-8b-8192",   # 🔥 estable
+        model="llama3-8b-8192",
         temperature=0.3,
         api_key=GROQ_API_KEY
     )
@@ -60,7 +71,8 @@ def get_chain(vectordb):
     prompt = PromptTemplate.from_template("""
 Responde SOLO con base en el contexto.
 
-Si no está en el documento, di: "No encontré esa información en el PDF".
+Si no está en el documento, responde:
+"No encontré esa información en el PDF"
 
 Contexto:
 {context}
@@ -72,7 +84,7 @@ Respuesta:
 """)
 
     retriever = vectordb.as_retriever(
-        search_kwargs={"k": 3}   # 🔥 evitar overflow
+        search_kwargs={"k": 3}
     )
 
     def format_docs(docs):
@@ -105,14 +117,19 @@ uploaded_file = st.file_uploader("📤 Sube tu PDF", type="pdf")
 
 if uploaded_file:
 
+    # guardar temporal
     with open("temp.pdf", "wb") as f:
         f.write(uploaded_file.read())
 
     st.success("✅ PDF cargado")
 
-    vectordb = process_pdf("temp.pdf")
-    chain = get_chain(vectordb)
+    # 🔥 solo procesa (no devuelve vectordb)
+    process_pdf("temp.pdf")
 
+    # 🔥 chain sin parámetros
+    chain = get_chain()
+
+    # memoria chat
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
@@ -124,7 +141,10 @@ if uploaded_file:
     question = st.chat_input("Haz una pregunta sobre el PDF")
 
     if question:
-        st.session_state.messages.append({"role": "user", "content": question})
+        st.session_state.messages.append({
+            "role": "user",
+            "content": question
+        })
 
         with st.chat_message("user"):
             st.markdown(question)
